@@ -204,13 +204,14 @@
                     <div class="game-desc">${game.description}</div>
                 `;
                 item.onclick = () => {
-                    // Navigate to this item
+                    // Navigate to this item and select it
                     while (currentState.menu && currentState.menu.cursor < i) {
                         render(JSON.parse(moveDown()));
                     }
                     while (currentState.menu && currentState.menu.cursor > i) {
                         render(JSON.parse(moveUp()));
                     }
+                    render(JSON.parse(selectGame()));
                 };
                 list.appendChild(item);
             }
