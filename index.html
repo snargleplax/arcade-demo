@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arcade</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            margin: 0;
+            padding: 20px;
+            background: #1a1a2e;
+            color: #eee;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+        h1 {
+            color: #ff79c6;
+            letter-spacing: 0.5em;
+            margin-bottom: 30px;
+        }
+        #loading {
+            color: #888;
+            margin: 20px;
+        }
+        #menu-container {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 400px;
+        }
+        #game-list {
+            width: 100%;
+            margin-bottom: 20px;
+        }
+        .game-item {
+            padding: 12px 16px;
+            margin: 4px 0;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+        .game-item:hover {
+            background: #2a2a4e;
+        }
+        .game-item.selected {
+            background: #2a2a4e;
+            border-left: 3px solid #ff79c6;
+        }
+        .game-name {
+            font-weight: bold;
+            color: #eee;
+        }
+        .game-item.selected .game-name {
+            color: #ff79c6;
+        }
+        .game-name::before {
+            content: '  ';
+            white-space: pre;
+        }
+        .game-item.selected .game-name::before {
+            content: '> ';
+            color: #ff79c6;
+        }
+        .game-desc {
+            color: #888;
+            font-size: 0.9em;
+            margin-top: 4px;
+            padding-left: 20px;
+            display: none;
+        }
+        .game-item.selected .game-desc {
+            display: block;
+        }
+        #controls {
+            color: #888;
+            font-size: 0.9em;
+        }
+        #message {
+            margin-top: 20px;
+            padding: 16px;
+            background: #2a2a4e;
+            border-radius: 8px;
+            display: none;
+        }
+        #message.visible {
+            display: block;
+        }
+        .empty-message {
+            color: #888;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <h1>A R C A D E</h1>
+    <div id="loading">Loading WASM...</div>
+    <div id="menu-container">
+        <div id="game-list"></div>
+        <div id="controls">↑/↓ navigate • enter select • games run in terminal</div>
+        <div id="message"></div>
+    </div>
+
+    <script src="wasm_exec.js"></script>
+    <script>
+        const go = new Go();
+        let menuData = null;
+
+        function renderMenu(data) {
+            menuData = data;
+            const list = document.getElementById('game-list');
+            list.innerHTML = '';
+
+            if (data.games.length === 0) {
+                list.innerHTML = '<div class="empty-message">No games yet. Check back soon.</div>';
+                return;
+            }
+
+            for (let i = 0; i < data.games.length; i++) {
+                const game = data.games[i];
+                const item = document.createElement('div');
+                item.className = 'game-item' + (i === data.cursor ? ' selected' : '');
+                item.innerHTML = `
+                    <div class="game-name">${game.name}</div>
+                    <div class="game-desc">${game.description}</div>
+                `;
+                item.onclick = () => {
+                    // Navigate to this item
+                    while (menuData.cursor < i) {
+                        renderMenu(JSON.parse(moveDown()));
+                    }
+                    while (menuData.cursor > i) {
+                        renderMenu(JSON.parse(moveUp()));
+                    }
+                };
+                list.appendChild(item);
+            }
+
+            // Show message if game was selected
+            const msg = document.getElementById('message');
+            if (data.selected) {
+                msg.textContent = `Selected: ${data.selected.name}. Run "make ${data.selected.id}" in terminal to play.`;
+                msg.className = 'visible';
+            } else {
+                msg.className = '';
+            }
+        }
+
+        WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((result) => {
+            go.run(result.instance);
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('menu-container').style.display = 'flex';
+
+            // Initialize menu
+            renderMenu(JSON.parse(initMenu()));
+
+            // Keyboard handlers
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    renderMenu(JSON.parse(moveUp()));
+                } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    renderMenu(JSON.parse(moveDown()));
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    renderMenu(JSON.parse(selectGame()));
+                }
+            });
+        }).catch(err => {
+            document.getElementById('loading').textContent = 'Error loading WASM: ' + err;
+        });
+    </script>
+</body>
+</html>
