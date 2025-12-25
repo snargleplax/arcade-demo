@@ -116,6 +116,15 @@
             color: #888;
             font-style: italic;
         }
+        #footer {
+            position: fixed;
+            bottom: 5px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 10px;
+            color: #666;
+        }
     </style>
 </head>
 <body>
@@ -129,6 +138,7 @@
         <div id="game-output"></div>
         <div id="game-controls">arrows/hjkl move • space/enter action • esc menu</div>
     </div>
+    <div id="footer"></div>
 
     <script src="wasm_exec.js"></script>
     <script>
@@ -209,6 +219,7 @@
         WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((result) => {
             go.run(result.instance);
             document.getElementById('loading').style.display = 'none';
+            document.getElementById('footer').textContent = gitSHA().substring(0, 7);
 
             // Initialize menu
             render(JSON.parse(initMenu()));
