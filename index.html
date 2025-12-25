@@ -33,6 +33,38 @@
             width: 100%;
             max-width: 400px;
         }
+        #game-container {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 600px;
+        }
+        #game-output {
+            width: 100%;
+            min-height: 200px;
+            padding: 20px;
+            background: #0a0a1e;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .game-line {
+            margin: 4px 0;
+            white-space: pre-wrap;
+        }
+        .game-line.bold {
+            font-weight: bold;
+        }
+        .game-line.dim {
+            opacity: 0.6;
+        }
+        .game-line.center {
+            text-align: center;
+        }
+        #game-controls {
+            color: #888;
+            font-size: 0.9em;
+        }
         #game-list {
             width: 100%;
             margin-bottom: 20px;
@@ -80,16 +112,6 @@
             color: #888;
             font-size: 0.9em;
         }
-        #message {
-            margin-top: 20px;
-            padding: 16px;
-            background: #2a2a4e;
-            border-radius: 8px;
-            display: none;
-        }
-        #message.visible {
-            display: block;
-        }
         .empty-message {
             color: #888;
             font-style: italic;
@@ -101,17 +123,60 @@
     <div id="loading">Loading WASM...</div>
     <div id="menu-container">
         <div id="game-list"></div>
-        <div id="controls">↑/↓ navigate • enter select • games run in terminal</div>
-        <div id="message"></div>
+        <div id="controls">↑/↓ navigate • enter select</div>
+    </div>
+    <div id="game-container">
+        <div id="game-output"></div>
+        <div id="game-controls">arrows/hjkl move • space/enter action • esc menu</div>
     </div>
 
     <script src="wasm_exec.js"></script>
     <script>
         const go = new Go();
-        let menuData = null;
+        let currentState = null;
+
+        // ANSI 256-color approximations for common colors
+        const colorMap = {
+            '212': '#ff79c6',
+            '241': '#888888'
+        };
+
+        function render(data) {
+            currentState = data;
+
+            const menuContainer = document.getElementById('menu-container');
+            const gameContainer = document.getElementById('game-container');
+
+            if (data.mode === 'game' && data.frame) {
+                menuContainer.style.display = 'none';
+                gameContainer.style.display = 'flex';
+                renderGame(data.frame);
+            } else if (data.mode === 'menu' && data.menu) {
+                gameContainer.style.display = 'none';
+                menuContainer.style.display = 'flex';
+                renderMenu(data.menu);
+            }
+        }
+
+        function renderGame(frame) {
+            const output = document.getElementById('game-output');
+            output.innerHTML = '';
+
+            for (const line of frame.lines) {
+                const div = document.createElement('div');
+                div.className = 'game-line';
+                if (line.style.bold) div.classList.add('bold');
+                if (line.style.dim) div.classList.add('dim');
+                if (line.style.center) div.classList.add('center');
+                if (line.style.color && colorMap[line.style.color]) {
+                    div.style.color = colorMap[line.style.color];
+                }
+                div.textContent = line.text || '\u00A0'; // non-breaking space for empty lines
+                output.appendChild(div);
+            }
+        }
 
         function renderMenu(data) {
-            menuData = data;
             const list = document.getElementById('game-list');
             list.innerHTML = '';
 
@@ -130,45 +195,76 @@
                 `;
                 item.onclick = () => {
                     // Navigate to this item
-                    while (menuData.cursor < i) {
-                        renderMenu(JSON.parse(moveDown()));
+                    while (currentState.menu && currentState.menu.cursor < i) {
+                        render(JSON.parse(moveDown()));
                     }
-                    while (menuData.cursor > i) {
-                        renderMenu(JSON.parse(moveUp()));
+                    while (currentState.menu && currentState.menu.cursor > i) {
+                        render(JSON.parse(moveUp()));
                     }
                 };
                 list.appendChild(item);
-            }
-
-            // Show message if game was selected
-            const msg = document.getElementById('message');
-            if (data.selected) {
-                msg.textContent = `Selected: ${data.selected.name}. Run "make ${data.selected.id}" in terminal to play.`;
-                msg.className = 'visible';
-            } else {
-                msg.className = '';
             }
         }
 
         WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((result) => {
             go.run(result.instance);
             document.getElementById('loading').style.display = 'none';
-            document.getElementById('menu-container').style.display = 'flex';
 
             // Initialize menu
-            renderMenu(JSON.parse(initMenu()));
+            render(JSON.parse(initMenu()));
 
             // Keyboard handlers
             document.addEventListener('keydown', (e) => {
-                if (e.key === 'ArrowUp') {
-                    e.preventDefault();
-                    renderMenu(JSON.parse(moveUp()));
-                } else if (e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    renderMenu(JSON.parse(moveDown()));
-                } else if (e.key === 'Enter') {
-                    e.preventDefault();
-                    renderMenu(JSON.parse(selectGame()));
+                let result = null;
+
+                switch (e.key) {
+                    case 'ArrowUp':
+                    case 'k':
+                        e.preventDefault();
+                        result = moveUp();
+                        break;
+                    case 'ArrowDown':
+                    case 'j':
+                        e.preventDefault();
+                        result = moveDown();
+                        break;
+                    case 'ArrowLeft':
+                    case 'h':
+                        e.preventDefault();
+                        result = moveLeft();
+                        break;
+                    case 'ArrowRight':
+                    case 'l':
+                        e.preventDefault();
+                        result = moveRight();
+                        break;
+                    case 'Enter':
+                        e.preventDefault();
+                        result = selectGame();
+                        break;
+                    case ' ':
+                        e.preventDefault();
+                        result = pressSpace();
+                        break;
+                    case 'Escape':
+                        e.preventDefault();
+                        result = pressEsc();
+                        break;
+                    case 'q':
+                        e.preventDefault();
+                        result = pressQ();
+                        break;
+                    default:
+                        // Any other key - for "press any key" prompts
+                        if (currentState && currentState.mode === 'game') {
+                            e.preventDefault();
+                            result = pressAnyKey();
+                        }
+                        break;
+                }
+
+                if (result) {
+                    render(JSON.parse(result));
                 }
             });
         }).catch(err => {
